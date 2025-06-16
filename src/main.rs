@@ -1,6 +1,6 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt}; // cargo add tokio --features full
 use tokio::net::TcpListener;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 const PORT: u16 = 34446;
 const TIMEOUT_MS: u64 = 5_000;
