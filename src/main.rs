@@ -7,8 +7,8 @@ use tokio::{
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Configure proxy settings
-    let listen_addr = "0.0.0.0:8080"; // Local address to bind to
-    let target_addr = "1.2.3.4:80"; // Remote server to forward to
+    let listen_addr = "0.0.0.0:34446"; // Local address to bind to
+    let target_addr = "127.0.0.1:32850"; // Remote server to forward to
 
     // Parse addresses
     let listen_addr: SocketAddr = listen_addr.parse()?;
