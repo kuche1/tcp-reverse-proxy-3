@@ -7,12 +7,13 @@ use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::time;
 
+const BIND: &str = "127.0.0.1:8080";
 const TIMEOUT: u64 = 1;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let listener = TcpListener::bind("127.0.0.1:8080").await?;
-    println!("Server running on 127.0.0.1:8080");
+    let listener = TcpListener::bind(BIND).await?;
+    println!("server running on: {}", BIND);
 
     loop {
         let (socket, addr) = listener.accept().await?;
