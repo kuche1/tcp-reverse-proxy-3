@@ -1,5 +1,6 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt}; // cargo add tokio --features full
 use tokio::net::TcpListener;
+use tokio::time::{timeout, Duration};
 
 const PORT: u16 = 34446;
 
@@ -22,11 +23,15 @@ async fn main() -> std::io::Result<()> {
 async fn handle_client(socket: &mut tokio::net::TcpStream) {
     let mut buf = [0u8; 1024];
     loop {
-        let n = match socket.read(&mut buf).await {
-            Ok(0) => break,
-            Ok(n) => n,
-            Err(e) => {
+        let n = match timeout(Duration::from_millis(5_000), socket.read(&mut buf)).await {
+            Ok(Ok(0)) => break,
+            Ok(Ok(n)) => n,
+            Ok(Err(e)) => {
                 eprintln!("read error: {}", e);
+                break;
+            }
+            Err(_) => {
+                eprintln!("timeout: no data received in 5000 ms");
                 break;
             }
         };
