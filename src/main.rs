@@ -6,8 +6,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time;
 
-const BIND: &str = "127.0.0.1:8080";
-const BACKEND_SERVER: &str = "127.0.0.1:8081"; // Change to your backend server
+const BIND: &str = "127.0.0.1:34446";
+const BACKEND_SERVER: &str = "127.0.0.1:32850"; // Change to your backend server
 const TIMEOUT_MS: u64 = 500;
 
 #[tokio::main]
