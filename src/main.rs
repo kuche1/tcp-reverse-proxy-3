@@ -1,11 +1,9 @@
-//
-
 use tokio::io::{AsyncReadExt, AsyncWriteExt}; // cargo add tokio --features full
 use tokio::net::TcpListener;
 use tokio::time::{Duration, timeout};
 
 const PORT: u16 = 34446;
-const TIMEOUT_MS: u64 = 5_000;
+const TIMEOUT_MS: u64 = 1_000;
 const REMOTE_ADDR: &str = "127.0.0.1:32850";
 
 #[tokio::main]
