@@ -1,43 +1,82 @@
+use rustls::{ServerConfig};
+use rustls_pemfile::{certs, rsa_private_keys};
+use std::fs::File;
+use std::io::BufReader;
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt}; // cargo add tokio --features full
 use tokio::net::TcpListener;
 use tokio::time::{Duration, timeout};
+use tokio_rustls::TlsAcceptor; // cargo add tokio-rustls rustls rustls-pemfile
+use rustls::pki_types::{CertificateDer, PrivatePkcs1KeyDer, PrivateKeyDer};
 
 const PORT: u16 = 34446;
 const TIMEOUT_MS: u64 = 1_000;
 const REMOTE_ADDR: &str = "127.0.0.1:32850";
 
+fn load_certs(path: &str) -> Vec<CertificateDer<'static>> {
+    let mut reader = BufReader::new(File::open(path).expect("cannot open cert.pem"));
+    certs(&mut reader)
+        .map(|res| res.expect("cannot read cert"))
+        .collect()
+}
+
+fn load_key(path: &str) -> PrivateKeyDer<'static> {
+    let mut reader = BufReader::new(File::open(path).expect("cannot open key.pem"));
+    let mut keys = rsa_private_keys(&mut reader)
+        .map(|res| res.expect("cannot read private key"));
+    let key: PrivatePkcs1KeyDer = keys.next().expect("no private key found");
+    key.into()
+}
+
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    // TLS setup
+    let certs = load_certs("cert.pem");
+    let key = load_key("key.pem");
+    let config = ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .expect("bad certificates/private key");
+
+    let acceptor = TlsAcceptor::from(Arc::new(config));
+
     let listener = TcpListener::bind(("0.0.0.0", PORT)).await?;
-    println!("Proxy server listening on 0.0.0.0:{}", PORT);
+    println!("TLS proxy server listening on 0.0.0.0:{}", PORT);
 
     loop {
-        let (mut inbound, addr) = listener.accept().await?;
+        let (inbound, addr) = listener.accept().await?;
+        let acceptor = acceptor.clone();
         println!("Accepted connection from {}", addr);
 
         tokio::spawn(async move {
-            match tokio::net::TcpStream::connect(REMOTE_ADDR).await {
-                Ok(mut outbound) => {
-                    println!("Connected to remote {}", REMOTE_ADDR);
-                    if let Err(e) = proxy(&mut inbound, &mut outbound).await {
-                        eprintln!("proxy error: {}", e);
+            match acceptor.accept(inbound).await {
+                Ok(mut tls_stream) => match tokio::net::TcpStream::connect(REMOTE_ADDR).await {
+                    Ok(mut outbound) => {
+                        println!("Connected to remote {}", REMOTE_ADDR);
+                        if let Err(e) = proxy(&mut tls_stream, &mut outbound).await {
+                            eprintln!("proxy error: {}", e);
+                        }
                     }
-                }
+                    Err(e) => {
+                        eprintln!("Failed to connect to remote {}: {}", REMOTE_ADDR, e);
+                    }
+                },
                 Err(e) => {
-                    eprintln!("Failed to connect to remote {}: {}", REMOTE_ADDR, e);
+                    eprintln!("TLS handshake failed: {}", e);
                 }
             }
         });
     }
 }
 
-async fn proxy(
-    inbound: &mut tokio::net::TcpStream,
-    outbound: &mut tokio::net::TcpStream,
-) -> std::io::Result<()> {
+async fn proxy<S1, S2>(inbound: &mut S1, outbound: &mut S2) -> std::io::Result<()>
+where
+    S1: AsyncReadExt + AsyncWriteExt + Unpin,
+    S2: AsyncReadExt + AsyncWriteExt + Unpin,
+{
     use tokio::io::split;
-    let (mut ri, mut wi) = split(&mut *inbound);
-    let (mut ro, mut wo) = split(&mut *outbound);
+    let (mut ri, mut wi) = split(inbound);
+    let (mut ro, mut wo) = split(outbound);
 
     let client_to_server = async {
         let mut buf = [0u8; 1024];
@@ -86,10 +125,6 @@ async fn proxy(
     };
 
     tokio::try_join!(client_to_server, server_to_client)?;
-
-    // Explicitly shutdown both sockets
-    inbound.shutdown().await.ok();
-    outbound.shutdown().await.ok();
 
     Ok(())
 }
