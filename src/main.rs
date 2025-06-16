@@ -17,7 +17,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         let (socket, addr) = listener.accept().await?;
-        println!("New connection from: {}", addr);
+
+        println!("new connection from: {}", addr);
 
         tokio::spawn(async move {
             handle_client(socket, addr).await;
