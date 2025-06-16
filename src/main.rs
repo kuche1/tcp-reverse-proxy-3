@@ -61,17 +61,26 @@ async fn main() -> std::io::Result<()> {
 
         tokio::spawn(async move {
             match acceptor.accept(inbound).await {
-                Ok(mut tls_stream) => match tokio::net::TcpStream::connect(REMOTE_ADDR).await {
-                    Ok(mut outbound) => {
-                        println!("Connected to remote {}", REMOTE_ADDR);
-                        if let Err(e) = proxy(&mut tls_stream, &mut outbound).await {
-                            eprintln!("proxy error: {}", e);
+                Ok(mut tls_stream) => {
+                    // Add timeout to the connect
+                    match timeout(
+                        Duration::from_millis(TIMEOUT_MS),
+                        tokio::net::TcpStream::connect(REMOTE_ADDR)
+                    ).await {
+                        Ok(Ok(mut outbound)) => {
+                            println!("Connected to remote {}", REMOTE_ADDR);
+                            if let Err(e) = proxy(&mut tls_stream, &mut outbound).await {
+                                eprintln!("proxy error: {}", e);
+                            }
+                        }
+                        Ok(Err(e)) => {
+                            eprintln!("Failed to connect to remote {}: {}", REMOTE_ADDR, e);
+                        }
+                        Err(_) => {
+                            eprintln!("Timeout connecting to remote {}", REMOTE_ADDR);
                         }
                     }
-                    Err(e) => {
-                        eprintln!("Failed to connect to remote {}: {}", REMOTE_ADDR, e);
-                    }
-                },
+                }
                 Err(e) => {
                     eprintln!("TLS handshake failed: {}", e);
                 }
