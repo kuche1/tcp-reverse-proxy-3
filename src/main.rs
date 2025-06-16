@@ -1,7 +1,10 @@
 // cargo add tokio --features full
 
 use tokio::io;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
+use tokio::time::{timeout, Duration};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -34,8 +37,33 @@ async fn transfer(mut inbound: TcpStream, mut outbound: TcpStream) -> io::Result
     let (mut ri, mut wi) = inbound.split();
     let (mut ro, mut wo) = outbound.split();
 
-    let client_to_server = io::copy(&mut ri, &mut wo);
-    let server_to_client = io::copy(&mut ro, &mut wi);
+    let client_to_server = async {
+        loop {
+            let mut buf = [0u8; 4096];
+            let n = match timeout(Duration::from_secs(1), ri.read(&mut buf)).await {
+                Ok(Ok(0)) => break, // EOF
+                Ok(Ok(n)) => n,
+                Ok(Err(e)) => return Err(e),
+                Err(_) => return Err(io::Error::new(io::ErrorKind::TimedOut, "client->server timeout")),
+            };
+            wo.write_all(&buf[..n]).await?;
+        }
+        Ok::<(), io::Error>(())
+    };
+
+    let server_to_client = async {
+        loop {
+            let mut buf = [0u8; 4096];
+            let n = match timeout(Duration::from_secs(1), ro.read(&mut buf)).await {
+                Ok(Ok(0)) => break, // EOF
+                Ok(Ok(n)) => n,
+                Ok(Err(e)) => return Err(e),
+                Err(_) => return Err(io::Error::new(io::ErrorKind::TimedOut, "server->client timeout")),
+            };
+            wi.write_all(&buf[..n]).await?;
+        }
+        Ok::<(), io::Error>(())
+    };
 
     tokio::try_join!(client_to_server, server_to_client)?;
     Ok(())
