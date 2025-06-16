@@ -1,51 +1,62 @@
 // cargo add tokio --features full
 // cargo add mini-redis
 
-// use mini_redis::{Result, client};
-//
-// #[tokio::main]
-// async fn main() -> Result<()> {
-//     // Open a connection to the mini-redis address.
-//     let mut client = client::connect("127.0.0.1:6379").await?;
-//
-//     // Set the key "hello" with value "world"
-//     client.set("hello", "world".into()).await?;
-//
-//     // Get key "hello"
-//     let result = client.get("hello").await?;
-//
-//     println!("got value from the server; result={:?}", result);
-//
-//     Ok(())
-// }
+use std::net::SocketAddr;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
+use tokio::net::TcpStream;
+use tokio::time;
 
-use mini_redis::{Connection, Frame};
-use tokio::net::{TcpListener, TcpStream};
+const TIMEOUT: u64 = 1;
 
 #[tokio::main]
-async fn main() {
-    let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let listener = TcpListener::bind("127.0.0.1:8080").await?;
+    println!("Server running on 127.0.0.1:8080");
 
     loop {
-        let (socket, _addr) = listener.accept().await.unwrap();
-        // A new task is spawned for each inbound socket. The socket is
-        // moved to the new task and processed there.
+        let (socket, addr) = listener.accept().await?;
+        println!("New connection from: {}", addr);
+
         tokio::spawn(async move {
-            process(socket).await;
+            handle_client(socket, addr).await;
         });
     }
 }
 
-async fn process(socket: TcpStream) {
-    // The `Connection` lets us read/write redis **frames** instead of
-    // byte streams. The `Connection` type is defined by mini-redis.
-    let mut connection = Connection::new(socket);
+async fn handle_client(mut socket: TcpStream, addr: SocketAddr) {
+    let mut buf = [0; 1024];
+    let timeout_duration = time::Duration::from_secs(TIMEOUT); // Set timeout duration (e.g., 30 seconds)
 
-    if let Some(frame) = connection.read_frame().await.unwrap() {
-        println!("GOT: {:?}", frame);
-
-        // Respond with an error
-        let response = Frame::Error("unimplemented".to_string());
-        connection.write_frame(&response).await.unwrap();
+    loop {
+        // Wrap the read operation in a timeout
+        match time::timeout(timeout_duration, socket.read(&mut buf)).await {
+            // Read completed within timeout
+            Ok(Ok(0)) => {
+                // Client disconnected
+                println!("Connection closed by {}", addr);
+                return;
+            }
+            Ok(Ok(n)) => {
+                // Data received
+                if let Err(e) = socket.write_all(&buf[0..n]).await {
+                    eprintln!("Write error to {}: {}", addr, e);
+                    return;
+                }
+            }
+            Ok(Err(e)) => {
+                // Read error
+                eprintln!("Read error from {}: {}", addr, e);
+                return;
+            }
+            Err(_) => {
+                // Timeout elapsed
+                println!(
+                    "Connection timed out (no data for {:?}) for {}",
+                    timeout_duration, addr
+                );
+                return;
+            }
+        }
     }
 }
