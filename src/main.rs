@@ -1,4 +1,5 @@
-use rustls::{ServerConfig};
+use rustls::ServerConfig;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs1KeyDer};
 use rustls_pemfile::{certs, rsa_private_keys};
 use std::fs::File;
 use std::io::BufReader;
@@ -7,7 +8,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt}; // cargo add tokio --features full
 use tokio::net::TcpListener;
 use tokio::time::{Duration, timeout};
 use tokio_rustls::TlsAcceptor; // cargo add tokio-rustls rustls rustls-pemfile
-use rustls::pki_types::{CertificateDer, PrivatePkcs1KeyDer, PrivateKeyDer};
+
+//
 
 const PORT: u16 = 34446;
 const TIMEOUT_MS: u64 = 1_000;
@@ -65,8 +67,10 @@ async fn main() -> std::io::Result<()> {
                     // Add timeout to the connect
                     match timeout(
                         Duration::from_millis(TIMEOUT_MS),
-                        tokio::net::TcpStream::connect(REMOTE_ADDR)
-                    ).await {
+                        tokio::net::TcpStream::connect(REMOTE_ADDR),
+                    )
+                    .await
+                    {
                         Ok(Ok(mut outbound)) => {
                             println!("Connected to remote {}", REMOTE_ADDR);
                             if let Err(e) = proxy(&mut tls_stream, &mut outbound).await {
