@@ -35,9 +35,9 @@ async fn proxy(
     inbound: &mut tokio::net::TcpStream,
     outbound: &mut tokio::net::TcpStream,
 ) -> std::io::Result<()> {
-    use tokio::io::{split, ReadHalf, WriteHalf};
-    let (mut ri, mut wi) = split(inbound);
-    let (mut ro, mut wo) = split(outbound);
+    use tokio::io::split;
+    let (mut ri, mut wi) = split(&mut *inbound);
+    let (mut ro, mut wo) = split(&mut *outbound);
 
     let client_to_server = async {
         let mut buf = [0u8; 1024];
@@ -86,5 +86,10 @@ async fn proxy(
     };
 
     tokio::try_join!(client_to_server, server_to_client)?;
+
+    // Explicitly shutdown both sockets
+    inbound.shutdown().await.ok();
+    outbound.shutdown().await.ok();
+
     Ok(())
 }
