@@ -10,7 +10,9 @@ async fn main() -> std::io::Result<()> {
 
     loop {
         let (mut socket, addr) = listener.accept().await?;
+
         println!("Accepted connection from {}", addr);
+
         tokio::spawn(async move {
             let mut buf = [0u8; 1024];
             loop {
