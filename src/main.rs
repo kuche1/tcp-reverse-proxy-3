@@ -14,21 +14,25 @@ async fn main() -> std::io::Result<()> {
         println!("Accepted connection from {}", addr);
 
         tokio::spawn(async move {
-            let mut buf = [0u8; 1024];
-            loop {
-                let n = match socket.read(&mut buf).await {
-                    Ok(0) => break,
-                    Ok(n) => n,
-                    Err(e) => {
-                        eprintln!("read error: {}", e);
-                        break;
-                    }
-                };
-                if let Err(e) = socket.write_all(&buf[..n]).await {
-                    eprintln!("write error: {}", e);
-                    break;
-                }
-            }
+            handle_client(&mut socket).await;
         });
+    }
+}
+
+async fn handle_client(socket: &mut tokio::net::TcpStream) {
+    let mut buf = [0u8; 1024];
+    loop {
+        let n = match socket.read(&mut buf).await {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) => {
+                eprintln!("read error: {}", e);
+                break;
+            }
+        };
+        if let Err(e) = socket.write_all(&buf[..n]).await {
+            eprintln!("write error: {}", e);
+            break;
+        }
     }
 }
