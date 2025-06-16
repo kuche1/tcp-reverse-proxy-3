@@ -33,28 +33,31 @@ async fn handle_client(mut socket: TcpStream, addr: SocketAddr) {
     loop {
         // Wrap the read operation in a timeout
         match time::timeout(timeout_duration, socket.read(&mut buf)).await {
-            // Read completed within timeout
-            Ok(Ok(0)) => {
-                // Client disconnected
-                println!("Connection closed by {}", addr);
-                return;
-            }
-            Ok(Ok(n)) => {
-                // Data received
-                if let Err(e) = socket.write_all(&buf[0..n]).await {
-                    eprintln!("Write error to {}: {}", addr, e);
-                    return;
+            Ok(result) => {
+                // Read completed within timeout
+                match result {
+                    Ok(0) => {
+                        // Client disconnected
+                        println!("Connection closed by {}", addr);
+                        return;
+                    }
+                    Ok(n) => {
+                        // Data received
+                        if let Err(e) = socket.write_all(&buf[0..n]).await {
+                            eprintln!("Write error to {}: {}", addr, e);
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        // Read error
+                        eprintln!("Read error from {}: {}", addr, e);
+                        return;
+                    }
                 }
             }
-            Ok(Err(e)) => {
-                // Read error
-                eprintln!("Read error from {}: {}", addr, e);
-                return;
-            }
             Err(_) => {
-                // Timeout elapsed
                 println!(
-                    "Connection timed out (no data for {:?}) for {}",
+                    "connection timed out (no data for {:?}) for {}",
                     timeout_duration, addr
                 );
                 return;
