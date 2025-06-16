@@ -22,10 +22,21 @@ fn load_certs(path: &str) -> Vec<CertificateDer<'static>> {
 
 fn load_key(path: &str) -> PrivateKeyDer<'static> {
     let mut reader = BufReader::new(File::open(path).expect("cannot open key.pem"));
+    // Try PKCS#1 first
     let mut keys = rsa_private_keys(&mut reader)
-        .map(|res| res.expect("cannot read private key"));
-    let key: PrivatePkcs1KeyDer = keys.next().expect("no private key found");
-    key.into()
+        .map(|res| res.expect("cannot read private key"))
+        .map(PrivatePkcs1KeyDer::into);
+    if let Some(key) = keys.next() {
+        return key;
+    }
+    // If PKCS#1 fails, try PKCS#8
+    let mut reader = BufReader::new(File::open(path).expect("cannot open key.pem"));
+    let pkcs8_keys = rustls_pemfile::pkcs8_private_keys(&mut reader)
+        .map(|res| res.expect("cannot read pkcs8 private key"));
+    if let Some(key) = pkcs8_keys.map(PrivateKeyDer::from).next() {
+        return key;
+    }
+    panic!("no private key found in {}", path);
 }
 
 #[tokio::main]
